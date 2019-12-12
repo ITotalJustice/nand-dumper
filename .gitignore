@@ -58,3 +58,4 @@ build/
 *.nro
 *.nacp
 *elf
+*nand.bin

@@ -17,14 +17,14 @@ void app_init(void)
 {
     consoleInit(NULL);
     ncmInitialize();
-    timeInitialize();
+    usbCommsInitialize();
     g_sd_free_space = ncm_get_storage_free_space_sd_card();
 }
 
 void app_exit(void)
 {
     ncmExit();
-    timeExit();
+    usbCommsExit();
     consoleExit(NULL);
 }
 
