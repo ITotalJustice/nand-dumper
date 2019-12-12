@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <malloc.h>
+#include <dirent.h>
+#include <unistd.h>
 #include <switch.h>
 
 #include "util.h"
@@ -24,6 +27,35 @@ uint32_t move_cursor_down(uint32_t cursor, uint32_t cursor_max)
     return cursor;
 }
 
+bool check_if_dir_exists(const char *directory)
+{
+    DIR *dir = opendir(directory);
+    if (!dir)
+        return false;
+    closedir(dir);
+    return true;
+}
+
+bool create_dir(const char *dir)
+{
+    if (check_if_dir_exists(dir))
+        return true;
+    int res = mkdir(dir, 0777);
+    if (res == 0)
+        return true;
+    return false;
+}
+
+bool change_dir(const char *path)
+{
+    if (!check_if_dir_exists(path))
+        create_dir(path);
+    int res = chdir(path);
+    if (res == 0)
+        return true;
+    return false;
+}
+
 void print_message_display(const char* message, ...)
 {
     char new_message[FS_MAX_PATH];
@@ -41,6 +73,19 @@ void poll_input(poll_input_t *k)
     hidScanInput();
     k->down = hidKeysDown(CONTROLLER_P1_AUTO);
     k->held = hidKeyboardHeld(CONTROLLER_P1_AUTO);
+}
+
+void get_date(TimeCalendarTime *out)
+{
+    uint64_t time_stamp;
+    TimeLocationName name;
+    TimeZoneRule rule;
+    TimeCalendarAdditionalInfo info;
+
+    timeGetCurrentTime(TimeType_Default, &time_stamp);
+    timeGetDeviceLocationName(&name);
+    timeLoadTimeZoneRule(&name, &rule);
+    timeToCalendarTime(&rule, time_stamp, out, &info);
 }
 
 Result ncm_open_storage(NcmContentStorage *ncm_storage, NcmStorageId storage_id)

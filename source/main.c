@@ -5,6 +5,7 @@
 #include "util.h"
 
 
+#define APP_PATH    "/switch/nand-dumper"
 #define APP_VERSION "0.0.1"
 
 // global because i intend to have the menu in a seperate c file soon (tm).
@@ -16,12 +17,14 @@ void app_init(void)
 {
     consoleInit(NULL);
     ncmInitialize();
+    timeInitialize();
     g_sd_free_space = ncm_get_storage_free_space_sd_card();
 }
 
 void app_exit(void)
 {
     ncmExit();
+    timeExit();
     consoleExit(NULL);
 }
 
@@ -51,6 +54,9 @@ void menu_print()
 int main(int argc, char *argv[])
 {
     app_init();
+    create_dir(APP_PATH);
+    change_dir(APP_PATH);
+
     menu_print();
 
     while (appletMainLoop())

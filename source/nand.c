@@ -9,7 +9,6 @@
 #include "util.h"
 
 
-#define OUTPUT_NAME "nand.bin"
 #define CHUNK_SIZE  0xFFFF0000
 #define BUF_SIZE    0x800000    // 8MiB
 
@@ -17,6 +16,8 @@
 typedef struct
 {
     FILE *f;
+    char *out_dir;
+
     void *data;
     uint64_t data_size;
     uint64_t data_written;
@@ -42,9 +43,9 @@ int nand_read(void *in)
     {
         char output_name[0x20];
         if (part < 10)
-            snprintf(output_name, 0x20, "%s.0%lu", OUTPUT_NAME, part);
+            snprintf(output_name, 0x20, "%s/0%lu", t->out_dir, part);
         else
-            snprintf(output_name, 0x20, "%s.%lu", OUTPUT_NAME, part);
+            snprintf(output_name, 0x20, "%s/%lu", t->out_dir, part);
 
         mtx_lock(&g_mtx);
         {
@@ -78,7 +79,6 @@ int nand_read(void *in)
 
     // cleanup then exit.
     free(buf);
-    fsStorageClose(&storage);
     return 0;
 }
 
@@ -121,7 +121,13 @@ bool nand_dump_start(int64_t free_space)
     if (!nand_mount(free_space))
         return false;
     
-    thrd_struct_t t = { NULL, malloc(BUF_SIZE), 0, 0, 0, nand_size };
+    TimeCalendarTime cal;
+    get_date(&cal);
+    char dir_buf[0x20];
+    sprintf(dir_buf, "nand_dump_%u-%u-%u-%u-%u", cal.year, cal.month, cal.day, cal.hour, cal.minute);
+    create_dir(dir_buf);
+
+    thrd_struct_t t = { NULL, dir_buf, malloc(BUF_SIZE), 0, 0, 0, nand_size };
 
     mtx_init(&g_mtx, mtx_plain);
 
@@ -140,5 +146,6 @@ bool nand_dump_start(int64_t free_space)
 
     mtx_destroy(&g_mtx);
     free(t.data);
+    fsStorageClose(&storage);
     return true;
 }
