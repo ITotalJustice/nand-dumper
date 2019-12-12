@@ -1,70 +1,116 @@
 #include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <malloc.h>
-#include <string.h>
 #include <switch.h>
 
-
-#define OUTPUT_NAME "nand.bin"
-#define CHUNK_SIZE  0xFFFF0000
-#define BUF_SIZE    0x800000    // 8MiB
+#include "nand.h"
 
 
-void app_init()
+#define APP_VERSION "0.0.1"
+
+typedef struct
+{
+    uint64_t down;
+    uint64_t held;
+} poll_input_t;
+
+
+// global because i intend to have the menu in a seperate c file soon (tm).
+static uint8_t g_cursor = 0;
+static int64_t g_sd_free_space = 0;
+
+
+void app_init(void)
 {
     consoleInit(NULL);
 }
 
-void app_exit()
+void app_exit(void)
 {
     consoleExit(NULL);
+}
+
+void menu_print()
+{
+    consoleClear();
+    printf("Welcome to nand dumper %s...\n\n\n", APP_VERSION);
+    printf("Total free sd card space = %ld\n\n\n", g_sd_free_space / 0x100000);
+
+    const char *options[] =
+    {
+        "dump nand",
+        "exit"
+    };
+
+    for (uint8_t i = 0; i < 2; i++)
+    {
+        if (g_cursor == i)
+            printf("> %s\n\n", options[i]);
+        else
+            printf("%s\n\n", options[i]);
+    }
+
+    consoleUpdate(NULL);
+}
+
+uint32_t move_cursor_up(uint32_t cursor, uint32_t cursor_max)
+{
+    if (cursor == 0)
+        cursor = cursor_max - 1;
+    else
+        cursor--;
+    return cursor;
+}
+
+uint32_t move_cursor_down(uint32_t cursor, uint32_t cursor_max)
+{
+    if (cursor == cursor_max - 1)
+        cursor = 0;
+    else
+        cursor++;
+    return cursor;
+}
+
+void poll_input(poll_input_t *k)
+{
+    hidScanInput();
+    k->down = hidKeysDown(CONTROLLER_P1_AUTO);
+    k->held = hidKeyboardHeld(CONTROLLER_P1_AUTO);
 }
 
 int main(int argc, char *argv[])
 {
     app_init();
+    menu_print();
 
-    printf("welcome to nand dumper...\n\n\n");
-    consoleUpdate(NULL);
-
-    int64_t nand_size = 0;
-    FsStorage storage;
-    fsOpenBisStorage(&storage, FsBisPartitionId_UserDataRoot);
-    fsStorageGetSize(&storage, &nand_size);
-
-    void *buf = malloc(BUF_SIZE);
-    if (buf == NULL)
-        return 1;
-
-    printf("starting dump process...\n\n\n");
-    consoleUpdate(NULL);
-
-    for (uint64_t offset = 0, part = 0; offset < nand_size; part++)
+    while (appletMainLoop())
     {
-        char output_name[0x20];
-        if (part < 10)
-            snprintf(output_name, 0x20, "%s.0%lu", OUTPUT_NAME, part);
-        else
-            snprintf(output_name, 0x20, "%s.%lu", OUTPUT_NAME, part);
-        FILE *f = fopen(output_name, "wb");
+        poll_input_t k;
+        poll_input(&k);
 
-        for (uint64_t chunk_done = 0, buf_size = BUF_SIZE; chunk_done < CHUNK_SIZE; chunk_done += BUF_SIZE, offset += BUF_SIZE)
+        if (k.down & KEY_DOWN)
         {
-            if (offset + buf_size > nand_size)
-                buf_size = nand_size - offset;
-
-            fsStorageRead(&storage, offset, buf, buf_size);
-            fwrite(buf, buf_size, 1, f);    // will multi thread after.
-            printf("dumping... %luMiB   %ldMiB\r", offset / 0x100000, nand_size / 0x100000);
-            consoleUpdate(NULL);
+            g_cursor = move_cursor_down(g_cursor, 2);
+            menu_print();
         }
-        fclose(f);
-    }
 
-    // cleanup then exit.
-    free(buf);
-    fsStorageClose(&storage);
+        if (k.down & KEY_UP)
+        {
+            g_cursor = move_cursor_up(g_cursor, 2);
+            menu_print();
+        }
+
+        if (k.down & KEY_A)
+        {
+            if (g_cursor == 0)
+                nand_dump_start();
+            
+            else
+                break;
+        }
+
+        if (k.down & KEY_B || k.down & KEY_PLUS)
+            break;
+    }
+    
     app_exit();
     return 0;
 }
