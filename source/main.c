@@ -2,16 +2,10 @@
 #include <switch.h>
 
 #include "nand.h"
+#include "util.h"
 
 
 #define APP_VERSION "0.0.1"
-
-typedef struct
-{
-    uint64_t down;
-    uint64_t held;
-} poll_input_t;
-
 
 // global because i intend to have the menu in a seperate c file soon (tm).
 static uint8_t g_cursor = 0;
@@ -51,31 +45,6 @@ void menu_print()
     consoleUpdate(NULL);
 }
 
-uint32_t move_cursor_up(uint32_t cursor, uint32_t cursor_max)
-{
-    if (cursor == 0)
-        cursor = cursor_max - 1;
-    else
-        cursor--;
-    return cursor;
-}
-
-uint32_t move_cursor_down(uint32_t cursor, uint32_t cursor_max)
-{
-    if (cursor == cursor_max - 1)
-        cursor = 0;
-    else
-        cursor++;
-    return cursor;
-}
-
-void poll_input(poll_input_t *k)
-{
-    hidScanInput();
-    k->down = hidKeysDown(CONTROLLER_P1_AUTO);
-    k->held = hidKeyboardHeld(CONTROLLER_P1_AUTO);
-}
-
 int main(int argc, char *argv[])
 {
     app_init();
@@ -102,7 +71,6 @@ int main(int argc, char *argv[])
         {
             if (g_cursor == 0)
                 nand_dump_start();
-            
             else
                 break;
         }
