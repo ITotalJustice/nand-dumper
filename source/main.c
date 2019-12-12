@@ -15,18 +15,21 @@ static int64_t g_sd_free_space = 0;
 void app_init(void)
 {
     consoleInit(NULL);
+    ncmInitialize();
+    g_sd_free_space = ncm_get_storage_free_space_sd_card();
 }
 
 void app_exit(void)
 {
+    ncmExit();
     consoleExit(NULL);
 }
 
 void menu_print()
 {
     consoleClear();
-    printf("Welcome to nand dumper %s...\n\n\n", APP_VERSION);
-    printf("Total free sd card space = %ld\n\n\n", g_sd_free_space / 0x100000);
+    printf("Welcome to nand dumper %s\n\n\n", APP_VERSION);
+    printf("Total free sd card space = %ldGB\n\n\n", g_sd_free_space / 0x100000);
 
     const char *options[] =
     {
@@ -70,7 +73,7 @@ int main(int argc, char *argv[])
         if (k.down & KEY_A)
         {
             if (g_cursor == 0)
-                nand_dump_start();
+                nand_dump_start(g_sd_free_space);
             else
                 break;
         }

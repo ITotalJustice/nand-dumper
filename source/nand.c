@@ -100,7 +100,7 @@ int nand_write(void *in)
     return 0;
 }
 
-bool nand_mount(void)
+bool nand_mount(int64_t free_space)
 {
     Result rc = 0;
 
@@ -109,16 +109,16 @@ bool nand_mount(void)
         return false;
 
     fsStorageGetSize(&storage, &nand_size);
-    if (R_SUCCEEDED(rc))
+    if (R_SUCCEEDED(rc) && nand_size < free_space + 0x2000000) // add 32mb to free space just in case the sd card has issues writing to 0 free space.
         return true;
 
     fsStorageClose(&storage);
     return false;
 }
 
-bool nand_dump_start(void)
+bool nand_dump_start(int64_t free_space)
 {
-    if (!nand_mount())
+    if (!nand_mount(free_space))
         return false;
     
     thrd_struct_t t = { NULL, malloc(BUF_SIZE), 0, 0, 0, nand_size };

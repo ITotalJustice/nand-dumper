@@ -21,4 +21,7 @@ void print_message_display(const char* message, ...);
 //
 void poll_input(poll_input_t *k);
 
+//
+int64_t ncm_get_storage_free_space_sd_card(void);
+
 #endif
