@@ -9,6 +9,8 @@
 #include "util.h"
 
 
+char output_dir[0x20];
+
 uint32_t move_cursor_up(uint32_t cursor, uint32_t cursor_max)
 {
     if (cursor == 0)
@@ -86,6 +88,19 @@ void get_date(TimeCalendarTime *out)
     timeGetDeviceLocationName(&name);
     timeLoadTimeZoneRule(&name, &rule);
     timeToCalendarTime(&rule, time_stamp, out, &info);
+}
+
+void set_up_output_dir(void)
+{
+    TimeCalendarTime cal;
+    get_date(&cal);
+    sprintf(output_dir, "%u_%u_%u_%u_%u", cal.year, cal.month, cal.day, cal.hour, cal.minute);
+    create_dir(output_dir);
+}
+
+const char *get_output_dir(void)
+{
+    return output_dir;
 }
 
 Result ncm_open_storage(NcmContentStorage *ncm_storage, NcmStorageId storage_id)

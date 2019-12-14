@@ -16,6 +16,7 @@
 typedef struct
 {
     FILE *f;
+    char *part_name;
     char *out_dir;
 
     void *data;
@@ -41,11 +42,19 @@ int nand_read(void *in)
 
     for (uint64_t part = 0; t->read_offset < nand_size; part++)
     {
-        char output_name[0x20];
-        if (part < 10)
-            snprintf(output_name, 0x20, "%s/0%lu", t->out_dir, part);
+        char output_name[0x30];
+
+        if (t->total_size > CHUNK_SIZE)
+        {
+            if (part < 10)
+                snprintf(output_name, 0x30, "%s/%s0%lu", t->out_dir, t->part_name, part);
+            else
+                snprintf(output_name, 0x30, "%s/%s%lu", t->out_dir, t->part_name, part);
+        }
         else
-            snprintf(output_name, 0x20, "%s/%lu", t->out_dir, part);
+        {
+           snprintf(output_name, 0x30, "%s/%s", t->out_dir, t->part_name); 
+        }
 
         mtx_lock(&g_mtx);
         {
@@ -100,11 +109,11 @@ int nand_write(void *in)
     return 0;
 }
 
-bool nand_mount(int64_t free_space)
+bool nand_mount(uint8_t partition_id, int64_t free_space)
 {
     Result rc = 0;
 
-    rc = fsOpenBisStorage(&storage, FsBisPartitionId_UserDataRoot);
+    rc = fsOpenBisStorage(&storage, partition_id);
     if (R_FAILED(rc))
         return false;
 
@@ -116,18 +125,15 @@ bool nand_mount(int64_t free_space)
     return false;
 }
 
-bool nand_dump_start(int64_t free_space)
+bool nand_dump_start(const char *name, uint8_t partition_id, int64_t free_space)
 {
-    if (!nand_mount(free_space))
+    if (!nand_mount(partition_id, free_space))
+    {
+        print_message_display("failed to mount partition %u\n\n", partition_id);
         return false;
-    
-    TimeCalendarTime cal;
-    get_date(&cal);
-    char dir_buf[0x20];
-    sprintf(dir_buf, "nand_dump_%u-%u-%u-%u-%u", cal.year, cal.month, cal.day, cal.hour, cal.minute);
-    create_dir(dir_buf);
+    }
 
-    thrd_struct_t t = { NULL, dir_buf, malloc(BUF_SIZE), 0, 0, 0, nand_size };
+    thrd_struct_t t = { NULL, name, get_output_dir(), malloc(BUF_SIZE), 0, 0, 0, nand_size };
 
     mtx_init(&g_mtx, mtx_plain);
 
@@ -141,9 +147,12 @@ bool nand_dump_start(int64_t free_space)
 
     while (t.data_written != t.total_size)
     {
-        print_message_display("dumping... %luMiB   %ldMiB\r", t.read_offset / 0x100000, t.total_size / 0x100000);
+        print_message_display("dumping... %luMiB   %ldMiB\r", t.data_written / 0x100000, t.total_size / 0x100000);
     }
+    print_message_display("dumping... %luMiB   %ldMiB\r", t.data_written / 0x100000, t.total_size / 0x100000); // print once more to show total size done.
 
+    thrd_join(t_read, NULL);
+    thrd_join(t_write, NULL);
     mtx_destroy(&g_mtx);
     free(t.data);
     fsStorageClose(&storage);

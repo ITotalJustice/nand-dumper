@@ -27,6 +27,10 @@ void poll_input(poll_input_t *k);
 void get_date(TimeCalendarTime *out);
 
 //
+void set_up_output_dir(void);
+const char *get_output_dir(void);
+
+//
 int64_t ncm_get_storage_free_space_sd_card(void);
 
 #endif

@@ -58,3 +58,6 @@ build/
 *.nro
 *.nacp
 *elf
+*nand.bin
+*boot
+*prodinfo

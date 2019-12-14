@@ -6,6 +6,6 @@
 
 
 //
-bool nand_dump_start(int64_t free_space);
+bool nand_dump_start(const char *name, uint8_t partition_id, int64_t free_space);
 
 #endif
