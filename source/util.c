@@ -9,7 +9,7 @@
 #include "util.h"
 
 
-char output_dir[0x20];
+char output_dir[0x30];
 
 uint32_t move_cursor_up(uint32_t cursor, uint32_t cursor_max)
 {
@@ -38,27 +38,39 @@ bool check_if_dir_exists(const char *directory)
     return true;
 }
 
-bool create_dir(const char *dir)
+bool create_dir(const char *dir, ...)
 {
-    if (check_if_dir_exists(dir))
+    char new_dir[FS_MAX_PATH];
+    va_list arg;
+    va_start(arg, dir);
+    vsprintf(new_dir, dir, arg);
+    va_end(arg);
+
+    if (check_if_dir_exists(new_dir))
         return true;
-    int res = mkdir(dir, 0777);
+    int res = mkdir(new_dir, 0777);
     if (res == 0)
         return true;
     return false;
 }
 
-bool change_dir(const char *path)
+bool change_dir(const char *path, ...)
 {
-    if (!check_if_dir_exists(path))
-        create_dir(path);
-    int res = chdir(path);
+    char new_path[FS_MAX_PATH];
+    va_list arg;
+    va_start(arg, path);
+    vsprintf(new_path, path, arg);
+    va_end(arg);
+
+    if (!check_if_dir_exists(new_path))
+        create_dir(new_path);
+    int res = chdir(new_path);
     if (res == 0)
         return true;
     return false;
 }
 
-void print_message_display(const char* message, ...)
+void print_message_display(const char *message, ...)
 {
     char new_message[FS_MAX_PATH];
     va_list arg;
@@ -70,6 +82,26 @@ void print_message_display(const char* message, ...)
     consoleUpdate(NULL);
 }
 
+void print_message_loop_lock(const char *message, ...)
+{
+    char new_message[FS_MAX_PATH];
+    va_list arg;
+    va_start(arg, message);
+    vsprintf(new_message, message, arg);
+    va_end(arg);
+
+    printf("%s", new_message);
+    consoleUpdate(NULL);
+
+    while (appletMainLoop())
+    {
+        poll_input_t k;
+        poll_input(&k);
+        if (k.down & KEY_B)
+            break;
+    }
+}
+
 void poll_input(poll_input_t *k)
 {
     hidScanInput();
@@ -77,25 +109,71 @@ void poll_input(poll_input_t *k)
     k->held = hidKeyboardHeld(CONTROLLER_P1_AUTO);
 }
 
-void get_date(TimeCalendarTime *out)
+bool get_sys_version(SetSysFirmwareVersion *ver)
+{
+	if (R_SUCCEEDED(setsysGetFirmwareVersion(ver)))
+		return true;
+    print_message_loop_lock("failed to get sys fw version.\n\n Press B to exit\n\n");
+    return false;
+}
+
+bool get_date(TimeCalendarTime *out)
 {
     uint64_t time_stamp;
     TimeLocationName name;
     TimeZoneRule rule;
     TimeCalendarAdditionalInfo info;
 
-    timeGetCurrentTime(TimeType_Default, &time_stamp);
-    timeGetDeviceLocationName(&name);
-    timeLoadTimeZoneRule(&name, &rule);
-    timeToCalendarTime(&rule, time_stamp, out, &info);
+    if (R_FAILED(timeGetCurrentTime(TimeType_Default, &time_stamp)))
+    {
+        print_message_loop_lock("failed to get sys fw version.\n\n Press B to exit\n\n");
+        return false;
+    }
+    if (R_FAILED(timeGetDeviceLocationName(&name)))
+    {
+        print_message_loop_lock("failed to get sys fw version.\n\n Press B to exit\n\n");
+        return false;
+    }
+    if (R_FAILED(timeLoadTimeZoneRule(&name, &rule)))
+    {
+        print_message_loop_lock("failed to get sys fw version.\n\n Press B to exit\n\n");
+        return false;
+    }
+    if (R_FAILED(timeToCalendarTime(&rule, time_stamp, out, &info)))
+    {
+        print_message_loop_lock("failed to get sys fw version.\n\n Press B to exit\n\n");
+        return false;
+    }
+    return true;
 }
 
-void set_up_output_dir(void)
+bool set_up_output_dir(void)
 {
     TimeCalendarTime cal;
-    get_date(&cal);
-    sprintf(output_dir, "%u_%u_%u_%u_%u", cal.year, cal.month, cal.day, cal.hour, cal.minute);
-    create_dir(output_dir);
+    SetSysFirmwareVersion ver;
+
+    if (!get_date(&cal) || !get_sys_version(&ver))
+        return false;
+
+    char year[0x6];
+    char month[0x4];
+    char day[0x4];
+
+    sprintf(year, "%u", cal.year);
+    sprintf(month, "%u", cal.month);
+    sprintf(day, "%u", cal.day);
+    sprintf(output_dir, "%s/%s/%s/%s", ver.display_version, year, month, day);
+    
+    if (!create_dir(ver.display_version))
+        return false;
+    if (!create_dir("%s/%s", ver.display_version, year))
+        return false;
+    if (!create_dir("%s/%s/%s", ver.display_version, year, month))
+        return false;
+    if (!create_dir(output_dir))
+        return false;
+
+    return true;
 }
 
 const char *get_output_dir(void)
@@ -107,7 +185,7 @@ Result ncm_open_storage(NcmContentStorage *ncm_storage, NcmStorageId storage_id)
 {
     Result rc = ncmOpenContentStorage(ncm_storage, storage_id);
     if (R_FAILED(rc))
-        printf("failed to open content storage\n");
+        print_message_loop_lock("failed to open content storage\n");
     return rc;
 }
 
@@ -124,7 +202,7 @@ int64_t ncm_get_storage_free_space(NcmStorageId storage_id)
     if (R_FAILED(ncm_open_storage(&ncm_storage, storage_id)))
         return size;
     if (R_FAILED(ncmContentStorageGetFreeSpaceSize(&ncm_storage, &size)))
-        printf("failed to get free storage space\n");
+        print_message_loop_lock("failed to get free storage space\n");
     ncm_close_storage(&ncm_storage);
     return size;
 }

@@ -7,28 +7,11 @@
 
 #define APP_PATH    "/switch/nand-dumper"
 #define APP_VERSION "0.0.1"
+#define CURSOR_MAX  14
 
 // global because i intend to have the menu in a seperate c file soon (tm).
-#define CURSOR_MAX  14
 static uint8_t g_cursor = 0;
 static int64_t g_sd_free_space = 0;
-
-
-void app_init(void)
-{
-    consoleInit(NULL);
-    ncmInitialize();
-    timeInitialize();
-    g_sd_free_space = ncm_get_storage_free_space_sd_card();
-}
-
-void app_exit(void)
-{
-    ncmExit();
-    timeExit();
-    consoleExit(NULL);
-}
-
 
 const char *partition_names[] =
 {
@@ -66,6 +49,21 @@ uint8_t partition_id[] =
     FsBisPartitionId_System
 };
 
+
+void app_init(void)
+{
+    consoleInit(NULL);
+    ncmInitialize();
+    setsysInitialize();
+    g_sd_free_space = ncm_get_storage_free_space_sd_card();
+}
+
+void app_exit(void)
+{
+    ncmExit();
+    setsysExit();
+    consoleExit(NULL);
+}
 
 void menu_print()
 {
@@ -112,7 +110,8 @@ int main(int argc, char *argv[])
 
         if (k.down & KEY_A)
         {
-            nand_dump_start(partition_names[g_cursor], partition_id[g_cursor], g_sd_free_space);  
+            nand_dump_start(partition_names[g_cursor], partition_id[g_cursor], g_sd_free_space);
+            menu_print();
         }
 
         if (k.down & KEY_B || k.down & KEY_PLUS)

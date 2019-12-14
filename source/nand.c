@@ -10,14 +10,14 @@
 
 
 #define CHUNK_SIZE  0xFFFF0000
-#define BUF_SIZE    0x800000    // 8MiB
+#define BUF_SIZE    0x400000    // 4MiB
 
 
 typedef struct
 {
     FILE *f;
-    char *part_name;
-    char *out_dir;
+    const char *part_name;
+    const char *out_dir;
 
     void *data;
     uint64_t data_size;
@@ -42,18 +42,20 @@ int nand_read(void *in)
 
     for (uint64_t part = 0; t->read_offset < nand_size; part++)
     {
-        char output_name[0x30];
+        char output_name[0x40];
 
+        // check if the total size is greater than 4GB (for fat32 support).
+        // if so, split it into parts using the name of the file + the part number 
         if (t->total_size > CHUNK_SIZE)
         {
             if (part < 10)
-                snprintf(output_name, 0x30, "%s/%s0%lu", t->out_dir, t->part_name, part);
+                snprintf(output_name, 0x40, "%s/%s0%lu", t->out_dir, t->part_name, part);
             else
-                snprintf(output_name, 0x30, "%s/%s%lu", t->out_dir, t->part_name, part);
+                snprintf(output_name, 0x40, "%s/%s%lu", t->out_dir, t->part_name, part);
         }
         else
         {
-           snprintf(output_name, 0x30, "%s/%s", t->out_dir, t->part_name); 
+           snprintf(output_name, 0x40, "%s/%s", t->out_dir, t->part_name); 
         }
 
         mtx_lock(&g_mtx);
@@ -149,10 +151,10 @@ bool nand_dump_start(const char *name, uint8_t partition_id, int64_t free_space)
     {
         print_message_display("dumping... %luMiB   %ldMiB\r", t.data_written / 0x100000, t.total_size / 0x100000);
     }
-    print_message_display("dumping... %luMiB   %ldMiB\r", t.data_written / 0x100000, t.total_size / 0x100000); // print once more to show total size done.
 
     thrd_join(t_read, NULL);
     thrd_join(t_write, NULL);
+    
     mtx_destroy(&g_mtx);
     free(t.data);
     fsStorageClose(&storage);
