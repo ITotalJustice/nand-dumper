@@ -28,7 +28,10 @@ typedef struct
 } thrd_struct_t;
 
 // globals
-static mtx_t g_mtx;
+mtx_t g_mtx;
+cnd_t can_write;
+cnd_t can_read;
+
 int64_t nand_size = 0;
 FsStorage storage;
 
@@ -38,16 +41,12 @@ int nand_read(void *in)
     thrd_struct_t *t = (thrd_struct_t *)in;
 
     void *buf = memalign(0x1000, BUF_SIZE);
-    if (buf == NULL)
-        return 1;
+    if (buf == NULL) return -1;
 
     for (uint64_t part = 0; t->read_offset < nand_size; part++)
     {
         char output_name[0x20];
-        if (part < 10)
-            snprintf(output_name, 0x20, "%s/0%lu", t->out_dir, part);
-        else
-            snprintf(output_name, 0x20, "%s/%lu", t->out_dir, part);
+        snprintf(output_name, 0x20, part < 10 ? "%s/0%lu" : "%s/%lu", t->out_dir, part);
 
         for (uint64_t chunk_done = 0, buf_size = BUF_SIZE; chunk_done < CHUNK_SIZE && t->read_offset < nand_size; chunk_done += BUF_SIZE, t->read_offset += BUF_SIZE)
         {
@@ -57,12 +56,17 @@ int nand_read(void *in)
             fsStorageRead(&storage, t->read_offset, buf, buf_size);
 
             mtx_lock(&g_mtx);
+            if (t->data_size > 0)
             {
-                t->data_size = buf_size;
-                t->data_stored += buf_size;
-                memcpy(t->data, buf, buf_size);
+                cnd_wait(&can_read, &g_mtx);
             }
+
+            t->data_size = buf_size;
+            t->data_stored += buf_size;
+            memcpy(t->data, buf, buf_size);
+
             mtx_unlock(&g_mtx);
+            cnd_signal(&can_write);
         }
     }
 
@@ -75,16 +79,20 @@ int nand_write(void *in)
 {
     thrd_struct_t *t = (thrd_struct_t *)in;
 
-    while (t->data_written != t->total_size)
+    while (t->data_written < t->total_size)
     {
-        if (t->data_written != t->data_stored)
+        mtx_lock(&g_mtx);
+        if (t->data_size == 0)
         {
-            mtx_lock(&g_mtx);
-            usb_write(t->data, t->data_size);
-            t->data_written += t->data_size;
-            t->data_size = 0;
+            cnd_wait(&can_write, &g_mtx);
         }
+
+        usb_write(t->data, t->data_size);
+        t->data_written += t->data_size;
+        t->data_size = 0;
+        
         mtx_unlock(&g_mtx);
+        cnd_signal(&can_read);
     }
 
     return 0;
@@ -121,6 +129,8 @@ bool nand_dump_start(int64_t free_space)
     thrd_struct_t t = { dir_buf, memalign(0x1000, BUF_SIZE), 0, 0, 0, 0, nand_size };
 
     mtx_init(&g_mtx, mtx_plain);
+    cnd_init(&can_read);
+    cnd_init(&can_write);
 
     thrd_t t_read;
     thrd_t t_write;
@@ -138,6 +148,9 @@ bool nand_dump_start(int64_t free_space)
     thrd_join(t_write, NULL);
     
     mtx_destroy(&g_mtx);
+    cnd_destroy(&can_read);
+    cnd_destroy(&can_write);
+
     free(t.data);
     fsStorageClose(&storage);
     usb_exit();
